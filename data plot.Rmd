@@ -1,0 +1,387 @@
+---
+title: "data plot"
+author: "陆霏旸 PB18061344"
+date: "2021/10/21"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(latex2exp)
+```
+
+```{r}
+# s <- c(rep("abc",5),rep("d",3))
+```
+
+# Industrial Production
+```{r}
+r_ip_ar_in <- 0.12644
+r_ip_ar_out <- 0.10849
+
+r_ip_pca_in <- c(0.0231,0.02296,0.02293,0.02292,0.02288,0.02285,0.02281,0.02274,0.0227,0.0227,0.022695,0.02268,0.02268,0.02267,0.02263)
+r_ip_ica_in <- c(0.02233,0.02184,0.02127,0.02108,0.02049,0.02048,0.02046,0.02013,0.02001,0.01984,0.01982,0.01974,0.01973,0.01967,0.01953)
+r_ip_spca_in <- c(0.02272,0.02223,0.02160,0.02148,0.02008,0.02004,0.01937,0.01937,0.01928,0.01923,0.01887,0.01876,0.01871,0.01866,0.01866)
+r_ip_sica_in <- c(0.02128,0.02103,0.02055,0.02051,0.02014,0.02014,0.02005,0.01992,0.01954,0.01952,0.01929,0.01929,0.01911,0.01893,0.01892)
+
+
+# r_ip_pca_out 的数据输出结果怎么这么大
+r_ip_pca_out <- c(64.79,64.739,64.75,65.92,66.89,66.7,67.52,66.88,67.01,67.06,67.02,67.01,67.02,67.02,65.96)
+r_ip_ica_out <- c(0.04743,0.04791,0.04787,0.04719,0.04766,0.04733,0.04711,0.04658,0.04621,0.04598,0.04517,0.04424,0.04396,0.04394,0.04419)
+r_ip_spca_out <- c(0.04262,0.043455,0.04332,0.04190,0.04152,0.04166,0.03988,0.03983,0.0397,0.03958,0.03771,0.03782,0.03772,0.03743,0.03737)
+r_ip_sica_out <- c(0.04788,0.04711,0.04755,0.04740,0.04716,0.04715,0.04672,0.04579,0.04535,0.04559,0.04508,0.04442,0.04393,0.04343,0.04253)
+
+ip_pca_in <- (1-r_ip_pca_in/r_ip_ar_in)/0.01
+ip_ica_in <- (1-r_ip_ica_in/r_ip_ar_in)/0.01
+ip_spca_in <- (1-r_ip_spca_in/r_ip_ar_in)/0.01
+ip_sica_in <- (1-r_ip_sica_in/r_ip_ar_in)/0.01
+
+ip_pca_out <- (1-r_ip_pca_out/r_ip_ar_out)/0.01
+ip_ica_out <- (1-r_ip_ica_out/r_ip_ar_out)/0.01
+ip_spca_out <- (1-r_ip_spca_out/r_ip_ar_out)/0.01
+ip_sica_out <- (1-r_ip_sica_out/r_ip_ar_out)/0.01
+
+```
+
+```{r}
+ip_in <- data.frame(nf=rep(c(1:15),4),
+                    y=c(ip_pca_in,ip_ica_in,ip_spca_in,ip_sica_in),
+                  class=c(rep("pca",15),rep("ica",15),
+                          rep("spca",15),rep("sica",15)))
+# ip_out <- data.frame(nf=rep(c(1:15),4),
+#                     y=c(ip_pca_out,ip_ica_out,ip_spca_out,ip_sica_out),
+#                   class=c(rep("pca",15),rep("ica",15),
+#                           rep("spca",15),rep("sica",15)))
+ip_out <- data.frame(nf=rep(c(1:15),3),
+                    y=c(ip_ica_out,ip_spca_out,ip_sica_out),
+                  class=c(rep("ica",15),
+                          rep("spca",15),rep("sica",15)))
+```
+
+```{r}
+# IP In-Sample 作图
+# ggplot(data=ip_in,aes(x=nf,y=y,color=class))+
+#   geom_point()+geom_line()+xlab("Number of factors")+
+#   ylab(TeX("$R^2$(%)"))+labs(title = "Industrial Production")+
+#   theme(plot.title = element_text(hjust = 0.5))
+a <- c(1:15)
+ipin <- ggplot(data=ip_in,aes(x=nf,y=y,color=class))+
+  geom_point()+geom_line()+xlab("Number of factors")+
+  ylab(TeX("$R^2$(%)"))+labs(title = "Industrial Production")+theme_bw()+
+   theme(axis.ticks = element_blank(), 
+        axis.title.x=element_text(vjust=1,size=12), 
+        axis.title.y=element_text(vjust=1,size=12), 
+        plot.title = element_text(hjust = 0.5,vjust=0.5,size=17),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+   
+        legend.title = element_text(size=15), 
+        legend.text = element_text(size=13))+
+  scale_x_continuous(breaks=a, labels = a*1) 
+ipin
+```
+
+```{r}
+# IP Out-of-Sample 作图
+a <- c(1:15)
+ipout <- ggplot(data=ip_out,aes(x=nf,y=y,color=class))+
+  geom_point()+geom_line()+xlab("Number of factors")+
+  ylab(TeX("$R^2_{OS}$(%)"))+labs(title = "Industrial Production")+theme_bw()+
+   theme(axis.ticks = element_blank(), 
+        axis.title.x=element_text(vjust=1,size=12), 
+        axis.title.y=element_text(vjust=1,size=12), 
+        plot.title = element_text(hjust = 0.5,vjust=0.5,size=17),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+   
+        legend.title = element_text(size=15), 
+        legend.text = element_text(size=13))+
+  scale_x_continuous(breaks=a, labels = a*1) 
+ipout 
+```
+
+
+
+# Volatility
+```{r}
+r_vo_ar_in <- 0.07573
+r_vo_ar_out <- 0.397
+
+r_vo_pca_in <- c(0.02845,0.02832,0.02829,0.02829,0.02826,0.02826,0.02821,0.02811,0.02802,0.02801,0.02801,0.02799,0.02799,0.02799,0.02793)
+r_vo_ica_in <- c(0.02614,0.02574,0.02475,0.02463,0.02245,0.02242,0.02233,0.02162,0.02159,0.02150,0.02148,0.02135,0.02135,0.02126,0.02107)
+r_vo_spca_in <- c(0.02425,0.02359,0.02258,0.02257,0.02129,0.02128,0.02036,0.02030,0.02017,0.02017,0.02013,0.02012,0.02005,0.02005,0.02)
+r_vo_sica_in <- c(0.02245,0.02235,0.0221,0.02198,0.02118,0.02118,0.02112,0.02104,0.0207,0.02068,0.02015,0.02012,0.02009,0.01991,0.01991)
+
+r_vo_pca_out <- c(59.01,60.83,60.95,60.96,61.01,61.04,61.1,61.17,61.21,61.20,61.19,61.19,61.2,61.2,61.21)
+r_vo_ica_out <- c(0.381,0.3821,0.3811,0.3805,0.3827,0.3822,0.3805,0.3816,0.382,0.3815,0.3814,0.3798,0.3808,0.3797,0.38)
+r_vo_spca_out <- c(0.3819,0.3814,0.3813,0.3813,0.3804,0.3804,0.3776,0.37799,0.37798,0.37796,0.3789,0.3787,0.3786,0.3786,0.3788)
+r_vo_sica_out <- c(0.3815,0.382,0.3813,0.3818,0.3824,0.3815,0.3797,0.3806,0.3814,0.3813,0.38129,0.3782,0.3811,0.3797,0.3779)
+
+vo_pca_in <- (1-r_vo_pca_in/r_vo_ar_in)/0.01
+vo_ica_in <- (1-r_vo_ica_in/r_vo_ar_in)/0.01
+vo_spca_in <- (1-r_vo_spca_in/r_vo_ar_in)/0.01
+vo_sica_in <- (1-r_vo_sica_in/r_vo_ar_in)/0.01
+
+vo_ica_out <- (1-r_vo_ica_out/r_vo_ar_out)/0.01
+vo_spca_out <- (1-r_vo_spca_out/r_vo_ar_out)/0.01
+vo_sica_out <- (1-r_vo_sica_out/r_vo_ar_out)/0.01
+```
+
+```{r}
+vo_in <- data.frame(nf=rep(c(1:15),4),
+                    y=c(vo_pca_in,vo_ica_in,vo_spca_in,vo_sica_in),
+                  class=c(rep("pca",15),rep("ica",15),
+                          rep("spca",15),rep("sica",15)))
+vo_out <- data.frame(nf=rep(c(1:15),3),
+                    y=c(vo_ica_out,vo_spca_out,vo_sica_out),
+                  class=c(rep("ica",15),
+                          rep("spca",15),rep("sica",15)))
+```
+
+```{r}
+# VO In-Sample 作图
+a <- c(1:15)
+voin <- ggplot(data=vo_in,aes(x=nf,y=y,color=class))+
+  geom_point()+geom_line()+xlab("Number of factors")+
+  ylab(TeX("$R^2$(%)"))+labs(title = "S&P 500 Index Volatility")+theme_bw()+
+   theme(axis.ticks = element_blank(), 
+        axis.title.x=element_text(vjust=1,size=12), 
+        axis.title.y=element_text(vjust=1,size=12), 
+        plot.title = element_text(hjust = 0.5,vjust=0.5,size=17),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+   
+        legend.title = element_text(size=15), 
+        legend.text = element_text(size=13))+
+  scale_x_continuous(breaks=a, labels = a*1) 
+voin  
+```
+
+```{r}
+# VO Out-of-Sample 作图
+a <- c(1:15)
+voout <- ggplot(data=vo_out,aes(x=nf,y=y,color=class))+
+  geom_point()+geom_line()+xlab("Number of factors")+
+  ylab(TeX("$R^2_{OS}$(%)"))+labs(title = "S&P 500 Index Volatility")+theme_bw()+
+   theme(axis.ticks = element_blank(), 
+        axis.title.x=element_text(vjust=1,size=12), 
+        axis.title.y=element_text(vjust=1,size=12), 
+        plot.title = element_text(hjust = 0.5,vjust=0.5,size=17),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+   
+        legend.title = element_text(size=15), 
+        legend.text = element_text(size=13))+
+  scale_x_continuous(breaks=a, labels = a*1) 
+voout  
+```
+
+
+# Inflation
+
+
+```{r}
+r_ia_ar_in <- 0.0018975
+r_ia_ar_out <- 0.04104
+
+r_ia_pca_in <- c(0.0018939,0.0018935, 0.0018922, 0.0018912, 0.0018825,0.0018778, 0.0018746, 0.0018743,0.0018724,0.0018706)
+r_ia_ica_in <- c(0.0018885, 0.0018787, 0.0018369, 0.0018368,0.0017718, 0.0017697, 0.0017248, 0.0017122, 0.0017002,0.0016985)
+r_ia_spca_in <- c(0.0018227, 0.0018051, 0.001756, 0.0017536,0.0017159, 0.0017112, 0.0016995, 0.0016994, 0.0016822,0.0016748)
+r_ia_sica_in <- c(0.0018184, 0.0017527, 0.0017364,  0.0017072, 0.0017066, 0.0017033, 0.0016977, 0.0016869, 0.0016637,0.0016566)
+
+r_ia_pca_out <- c(0.55702, 0.54689, 0.57427, 0.6118, 0.63008, 0.61697, 0.66343, 0.6693,0.66084, 0.65938)
+r_ia_ica_out <- c(0.0390182, 0.039079, 0.039009, 0.038838, 0.038827, 0.038797, 0.038967, 0.038801, 0.039379,0.038946)
+r_ia_spca_out <- c(0.03967, 0.039689, 0.039906, 0.039924, 0.040568,0.04048, 0.040549, 0.040564, 0.040639, 0.040667)
+r_ia_sica_out <- c(0.03903, 0.039019, 0.038938, 0.038856, 0.038751, 0.038708,  0.038668, 0.038521, 0.038586, 0.038813)
+
+ia_pca_in <- (1-r_ia_pca_in/r_ia_ar_in)/0.01
+ia_ica_in <- (1-r_ia_ica_in/r_ia_ar_in)/0.01
+ia_spca_in <- (1-r_ia_spca_in/r_ia_ar_in)/0.01
+ia_sica_in <- (1-r_ia_sica_in/r_ia_ar_in)/0.01
+
+ia_ica_out <- (1-(r_ia_ica_out/r_ia_ar_out))/0.01
+ia_spca_out <- (1-(r_ia_spca_out/r_ia_ar_out))/0.01
+ia_sica_out <- (1-(r_ia_sica_out/r_ia_ar_out))/0.01
+
+```
+
+
+```{r}
+ia_in <- data.frame(nf=rep(c(1:10),4),
+                    y=c(ia_pca_in,ia_ica_in,ia_spca_in,ia_sica_in),
+                  class=c(rep("pca",10),rep("ica",10),
+                        rep("spca",10),rep("sica",10)))
+
+ia_out <- data.frame(nf=rep(c(1:10),3),
+                     y=c(ia_ica_out,ia_spca_out,ia_sica_out),
+                  class=c(rep("ica",10),
+                          rep("spca",10),rep("sica",10)))
+```
+
+```{r}
+# IA In-Sample 作图
+b <- c(1:10)
+iain <- ggplot(data=ia_in,aes(x=nf,y=y,color=class))+
+  geom_point()+geom_line()+xlab("Number of factors")+
+  ylab(TeX("$R^2$(%)"))+labs(title = "Inflation")+theme_bw()+
+   theme(axis.ticks = element_blank(), 
+        axis.title.x=element_text(vjust=1,size=12), 
+        axis.title.y=element_text(vjust=1,size=12), 
+        plot.title = element_text(hjust = 0.5,vjust=0.5,size=17),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+   
+        legend.title = element_text(size=15), 
+        legend.text = element_text(size=13))+
+  scale_x_continuous(breaks=b, labels = b*1)
+iain
+```
+
+```{r}
+# IA Out-of-Sample 作图
+b <- c(1:10)
+iaout <- ggplot(data=ia_out,aes(x=nf,y=y,color=class))+
+  geom_point()+geom_line()+
+  xlab("Number of factors")+ylab(TeX("$R^2_{OS}$(%)"))+
+  labs(title = "Inflation")+theme_bw()+
+  theme(axis.ticks = element_blank(), 
+        axis.title.x=element_text(vjust=1,size=12), 
+        axis.title.y=element_text(vjust=1,size=12), 
+        plot.title = element_text(hjust = 0.5,vjust=0.5,size=17),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+   
+        legend.title = element_text(size=15), 
+        legend.text = element_text(size=13))+
+  scale_x_continuous(breaks=b, labels = b*1)
+iaout  
+```
+
+
+
+
+
+
+# Inflation robust test_1
+```{r}
+x <- c(0.03898,0.039047,0.038909,0.038948,0.039133,0.039093,0.038877,0.038772,0.038816,0.039071)
+w <- c(0.038861,0.039397,0.039454,0.039728,0.039537,0.039464,0.039491,0.039443,0.039385,0.039386)
+z <- c(0.038815,0.038932,0.038879,0.038689,0.039061,0.038812,0.038753,0.038756,0.038734, 0.038812)
+
+ia1_ica_out <- (1-(x/r_ia_ar_out))/0.01
+ia1_spca_out <- (1-(w/r_ia_ar_out))/0.01
+ia1_sica_out <- (1-(z/r_ia_ar_out))/0.01
+
+ia1_out <- data.frame(nf=rep(c(1:10),3),
+                     y=c(ia1_ica_out,ia1_spca_out,ia1_sica_out),
+                  class=c(rep("ica",10),
+                          rep("spca",10),rep("sica",10)))
+
+b <- c(1:10)
+ia1out <- ggplot(data=ia1_out,aes(x=nf,y=y,color=class))+
+  geom_point()+geom_line()+
+  xlab("Number of factors")+ylab(TeX("$R^2_{OS}$(%)"))+
+  labs(title = "Inflation")+theme_bw()+
+  theme(axis.ticks = element_blank(), 
+        axis.title.x=element_text(vjust=1,size=12), 
+        axis.title.y=element_text(vjust=1,size=12), 
+        plot.title = element_text(hjust = 0.5,vjust=0.5,size=17),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+   
+        legend.title = element_text(size=15), 
+        legend.text = element_text(size=13))+
+  scale_x_continuous(breaks=b, labels = b*1)
+ia1out
+```
+
+
+
+# Inflation robust test_2
+
+
+```{r}
+r_ia2_ar_in <- 0.001740443
+r_ia2_ar_out <- 0.04384899
+
+r_ia2_pca_in <- c(0.00173514,0.001733812,0.00173301,0.00172816,0.00172771,0.001717515,0.001717439,0.00171651,0.001714983,0.001714579)
+r_ia2_ica_in <- c(0.001715174,0.00170799,0.00165554,0.00165537,0.00161579,0.001614748,0.001564156,0.001557388,0.00154934,0.00154904)
+r_ia2_spca_in <- c(0.001664664,0.00164702,0.00160161,0.00160007,0.00156353,0.001561008,0.001546322,0.00153964,0.001536037,0.001535491)
+r_ia2_sica_in <- c(0.001656749,0.00160571,0.00158819,0.00157244,0.00157243,0.001569672,0.001557613,0.001536458,0.0015078532,0.001507593)
+
+r_ia2_pca_out <- c(2.191527,2.28844,2.28218,2.18093,2.18337,2.177406,2.179864,2.210246,2.21131,2.20332)
+r_ia2_ica_out <- c(0.04173593,0.0416375,0.0416099,0.0415704,0.0415209,0.0414619,0.0414819,0.04152703,0.04139545,0.041421)
+r_ia2_spca_out <- c(0.04224986,0.042276,0.0425418,0.0424698,0.0423968,0.04222833,0.04221323,0.04216526,0.04214736,0.04215525)
+r_ia2_sica_out <- c(0.0415443,0.0415265,0.0415694,0.0415423,0.0414803,0.04148547,0.04138313,0.04132037,0.04132255,0.04126271)
+
+ia2_pca_in <- (1-r_ia2_pca_in/r_ia2_ar_in)/0.01
+ia2_ica_in <- (1-r_ia2_ica_in/r_ia2_ar_in)/0.01
+ia2_spca_in <- (1-r_ia2_spca_in/r_ia2_ar_in)/0.01
+ia2_sica_in <- (1-r_ia2_sica_in/r_ia2_ar_in)/0.01
+
+ia2_ica_out <- (1-(r_ia2_ica_out/r_ia2_ar_out))/0.01
+ia2_spca_out <- (1-(r_ia2_spca_out/r_ia2_ar_out))/0.01
+ia2_sica_out <- (1-(r_ia2_sica_out/r_ia2_ar_out))/0.01
+
+```
+
+
+```{r}
+ia2_in <- data.frame(nf=rep(c(1:10),4),
+                    y=c(ia2_pca_in,ia2_ica_in,ia2_spca_in,ia2_sica_in),
+                  class=c(rep("pca",10),rep("ica",10),
+                        rep("spca",10),rep("sica",10)))
+
+ia2_out <- data.frame(nf=rep(c(1:10),3),
+                     y=c(ia2_ica_out,ia2_spca_out,ia2_sica_out),
+                  class=c(rep("ica",10),
+                          rep("spca",10),rep("sica",10)))
+```
+
+```{r}
+# IA2 In-Sample 作图
+b <- c(1:10)
+ggplot(data=ia2_in,aes(x=nf,y=y,color=class))+
+  geom_point()+geom_line()+xlab("Number of factors")+
+  ylab(TeX("$R^2$(%)"))+labs(title = "Inflation")+
+  theme(plot.title = element_text(hjust = 0.5))+
+  scale_x_continuous(breaks=b, labels = b*1)
+# +scale_color_manual(values = c("green", "blue", "pink","purple"))
+ 
+```
+
+```{r}
+# IA2 Out-of-Sample 作图
+# b <- c(1:10)
+# ggplot(data=ia2_out,aes(x=nf,y=y,color=class))+
+#   geom_point()+geom_line()+xlab("Number of factors")+
+#   ylab(TeX("$R^2$(%)"))+labs(title = "Inflation")+
+#   theme(plot.title = element_text(hjust = 0.5))+
+#   scale_x_continuous(breaks=b, labels = b*1)
+
+
+b <- c(1:10)
+ia2out <- ggplot(data=ia2_out,aes(x=nf,y=y,color=class))+
+  geom_point()+geom_line()+
+  xlab("Number of factors")+ylab(TeX("$R^2_{OS}$(%)"))+
+  labs(title = "Inflation")+theme_bw()+
+  theme(axis.ticks = element_blank(), 
+        axis.title.x=element_text(vjust=1,size=12), 
+        axis.title.y=element_text(vjust=1,size=12), 
+        plot.title = element_text(hjust = 0.5,vjust=0.5,size=17),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+   
+        legend.title = element_text(size=15), 
+        legend.text = element_text(size=13))+
+  scale_x_continuous(breaks=b, labels = b*1)
+ia2out 
+```
+
+
+
+

@@ -1,0 +1,489 @@
+---
+title: "vola"
+author: "Feiyang"
+date: "2022/3/30"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 加载相应的包
+```{r}
+library(fbi)
+library(forecast)
+library(fastICA)
+```
+
+
+# 读取数据
+```{r}
+file <- "./data/2021-12.csv"
+raw_data <- fredmd(file, date_start = NULL, date_end = NULL, transform = TRUE) ## fbi package "fredmd" 处理
+```
+
+
+```{r}
+# remove outliers
+# data_clean <- rm_outliers.fredmd(data)
+# Factor model
+# col_na_prop <- apply(is.na(data_clean),2,mean)
+# data_select <- data_clean[,(col_na_prop<0.05)]
+# data_bal <- na.omit(data_select)
+```
+
+
+
+# 处理数据
+```{r}
+
+#数据时间跨度1960-01-01~2020-12-01
+data <- raw_data[13:744,2:ncol(raw_data)]
+
+# NA数据化为0
+N <- ncol(data)
+for (i in 1:N){
+  data[which(is.na(data[,i])),i] <- 0
+}
+#rownames(data_new) <- data_bal[,1]   
+View(data)
+```
+
+
+# 分离X和y
+```{r}
+y_name <- c("INDPRO","UNRATE","S&P 500","CPIAUCSL")
+y <- data[,colnames(data) %in% y_name]
+X <- data[,!colnames(data) %in% y_name] 
+```
+
+
+
+# 提取不同的y变量
+```{r}
+y_infla <- y[,"CPIAUCSL"]
+y_ip <- y[,"INDPRO"]
+
+y_unem <- y[,"UNRATE"]
+y_vo <- y[,"S&P 500"]
+vo <- y_vo
+
+# y_infla_in <- y_in[,"CPIAUCSL"]
+# y_ip_in <- y_in[,"INDPRO"]
+# y_unem_in <- y_in[,"UNRATE"]
+# y_vola_in <- y_in[,"S&P 500"]
+# 
+# y_infla_out <- y_out[,"CPIAUCSL"]
+# y_ip_out <- y_out[,"INDPRO"]
+# y_unem_out <- y_out[,"UNRATE"]
+# y_vola_out <- y_out[,"S&P 500"]
+```
+
+
+
+# 确定y数据的滞后阶数
+```{r}
+auto.arima(y_infla,max.p=20,max.q=0,ic="bic") #滞后11阶 (11,0,0)
+auto.arima(y_ip,max.p=20,max.q=0,ic="bic") #滞后6阶 (6,1,0)
+auto.arima(y_unem,max.p=20,max.q=0,ic="bic") #滞后0阶取1阶 (0,0,0)
+auto.arima(y_vo,max.p=20,max.q=0,ic="bic") #滞后1阶 (1,0,0)
+```
+
+
+
+# in-sample & out-of-sample 划分
+```{r}
+n_in <- 492 #1960-2000
+n_out <- 240 #2001-2020
+```
+
+
+
+# vo数据(in-sample)
+```{r}
+X_vo_in <- X[1:491,]
+C_vo_in <- scale(X_vo_in,center = TRUE,scale = FALSE)
+Z_vo_in <- apply(X_vo_in,2,scale)
+
+X_vo_in <- as.matrix(X_vo_in)
+C_vo_in <- as.matrix(C_vo_in)
+Z_vo_in <- as.matrix(Z_vo_in)
+
+y_vo_in <- y_ip[2:n_in]
+
+vo1 <- y_vo[1:491]
+```
+
+
+## vo in-sample ar
+```{r}
+vo_ar <- arima(y_vo[1:n_in],order=c(1,0,0))
+vo_ar_coef <- vo_ar$coef
+
+
+a <- matrix(rep(1,n_in-1),nrow=n_in-1,ncol=1)
+vo_ar_in <- cbind(vo1,a)
+vo_ar_in <- as.matrix(vo_ar_in)
+
+
+vo_ar_in_hat <- vo_ar_in %*% vo_ar_coef
+r <- y_vo_in-vo_ar_in_hat
+vo_r_ar_in <- sum(r^2)
+
+options(digits=4)
+vo_r_ar_in
+```
+
+
+
+## vo_PCA_in
+```{r}
+S_vo_in <- (1/n_in-1)*t(Z_vo_in)%*%Z_vo_in
+#S_ip_in <- cov(Z_ip_in)
+de_vo_in <- eigen(S_vo_in)
+ve_vo_in <- de_vo_in$vectors[,1:15]
+
+f_vo_pca_in <- Z_vo_in %*% ve_vo_in
+f_vo_pca_in <- data.frame(f_vo_pca_in)
+data_vo_pca_in <- cbind (f_vo_pca_in,vo1,y_vo_in)
+lm_vo_pca_in <- lm(y_vo_in~.,data=data_vo_pca_in)
+
+vo_pca_coef <- lm_vo_pca_in$coefficients
+
+
+
+a <- matrix(rep(1,n_in-1),nrow=n_in-1,ncol=1)
+
+va_m <- cbind(a,f_vo_pca_in,vo1)
+va_m <- as.matrix(va_m)
+
+vo_pca_in_hat <- va_m %*% vo_pca_coef
+r <- y_vo_in-vo_pca_in_hat
+vo_r_pca_in <- sum(r^2)
+
+options(digits=4)
+vo_r_pca_in
+```
+
+
+
+## vo_ica_in
+```{r}
+# S_ip_in <- (1/n_in-6)*t(C_ip_in)%*%C_ip_in
+# de_ip_in <- eigen(S_ip_in)
+# ve_ip_in <- de_ip_in$vectors
+# va_ip_in <- de_ip_in$values
+# f_ip_in <- C_ip_in %*% ve_ip_in
+# VA_ip_in<- diag(va_ip_in)
+
+f_vo_ica_in <- fastICA(X_vo_in,n.comp=15,alg.typ = "parallel",
+                    fun = "logcosh",method="R")$S
+f_vo_ica_in <- data.frame(f_vo_ica_in)
+
+data_vo_ica_in <- cbind (f_vo_ica_in,vo1,y_vo_in)
+lm_vo_ica_in <- lm(y_vo_in~.,data=data_vo_ica_in)
+vo_ica_coef <- lm_vo_ica_in$coefficients
+
+
+a <- matrix(rep(1,n_in-1),nrow=n_in-1,ncol=1)
+
+va_m <- cbind(a,f_vo_ica_in,vo1)
+va_m <- as.matrix(va_m)
+
+
+vo_ica_in_hat <- va_m %*% vo_ica_coef
+r <- y_vo_in-vo_ica_in_hat
+vo_r_ica_in <- sum(r^2)
+
+
+vo_r_ica_in
+```
+
+
+
+
+## vo_sPCA_in
+```{r}
+# regress vo on the standardized indicator
+lm_vo_in <- lm(y_vo_in~Z_vo_in)
+gam_vo_in <- lm_vo_in$coefficients[2:124]
+GAM_vo_in<- diag(gam_vo_in)
+
+X_vo_spca_in <- Z_vo_in%*%GAM_vo_in
+Z_vo_spca_in <- apply(X_vo_spca_in,2,scale)
+
+
+S_vo_spca_in <- cov(X_vo_spca_in)
+de_vo_spca_in <- eigen(S_vo_spca_in)
+ve_vo_spca_in <- de_vo_spca_in$vectors[,1:15]
+f_vo_spca_in <- X_vo_spca_in %*% ve_vo_spca_in
+
+data_vo_spca_in <- cbind (f_vo_spca_in,vo1,y_vo_in)
+data_vo_spca_in <- data.frame(data_vo_spca_in)
+lm_vo_spca_in <- lm(y_vo_in~.,data=data_vo_spca_in)
+vo_spca_coef <- lm_vo_spca_in$coefficients
+
+a <- matrix(rep(1,n_in-1),nrow=n_in-1,ncol=1)
+
+va_m <- cbind(a,f_vo_spca_in,vo1)
+va_m <- as.matrix(va_m)
+
+
+vo_spca_in_hat <- va_m %*% vo_spca_coef
+r <- y_vo_in-vo_spca_in_hat
+vo_r_spca_in <- sum(r^2)
+
+vo_r_spca_in
+```
+
+
+
+## vo_sICA_in
+```{r}
+
+lm_vo_in <- lm(y_vo_in~Z_vo_in)
+gam_vo_in <- lm_vo_in$coefficients[2:124]
+GAM_vo_in<- diag(gam_vo_in)
+
+X_vo_sica_in <- Z_vo_in%*%GAM_vo_in
+Z_vo_sica_in <- apply(X_vo_spca_in,2,scale)
+
+
+f_vo_sica_in <- fastICA(Z_vo_sica_in,n.comp=15,alg.typ = "parallel",
+                     fun = "logcosh",method="R")$S
+
+f_vo_sica_in <- data.frame(f_vo_sica_in)
+data_vo_sica_in <- cbind (f_vo_sica_in,vo1,y_vo_in)
+
+lm_vo_sica_in <- lm(y_vo_in~.,data=data_vo_sica_in)
+
+vo_sica_coef <- lm_vo_sica_in$coefficients
+
+
+a <- matrix(rep(1,n_in-1),nrow=n_in-1,ncol=1)
+
+va_m <- cbind(a,f_vo_sica_in,vo1)
+va_m <- as.matrix(va_m)
+
+
+vo_sica_in_hat <- va_m %*% vo_sica_coef
+r <- y_vo_in-vo_sica_in_hat
+vo_r_sica_in <- sum(r^2)
+
+options(digits = 4)
+vo_r_sica_in
+```
+
+
+
+
+# vo数据(out-of-sample)
+```{r}
+X_vo_out <- X[492:731,]
+C_vo_out <- scale(X_vo_out,center = TRUE,scale = FALSE)
+Z_vo_out <- apply(X_vo_out,2,scale)
+
+X_vo_out <- as.matrix(X_vo_out)
+C_vo_out <- as.matrix(C_vo_out)
+Z_vo_out <- as.matrix(Z_vo_out)
+
+y_vo_out <- y_vo[493:732]
+
+```
+
+
+
+
+## vo out-of-sample ar
+```{r}
+vo_ar_out <- arima(y_vo[492:732],order=c(1,0,0))
+vo_ar_out_coef <- vo_ar_out$coef
+ 
+a <- matrix(rep(1,n_out),nrow=n_out,ncol=1)
+vo_ar_out <- cbind(y_vo[491:731],a)
+vo_ar_out <- as.matrix(vo_ar_out)
+
+
+vo_ar_out_hat <- vo_ar_out %*% vo_ar_out_coef
+r <- y_vo_out-vo_ar_out_hat
+vo_r_ar_out <- sum(r^2)
+
+options(digits=4)
+vo_r_ar_out
+# vo_ar_out <- cbind(y1_out,y2_out,y3_out,y4_out,y5_out,y6_out)
+# ip_ar_out <- as.matrix(ip_ar_out)
+# 
+# 
+# ip_ar_out_hat <- ip_ar_out %*% ip_ar_out_coef
+# r <- y_ip_out-ip_ar_out_hat
+# ip_r_ar_out <- sum(r^2)
+# 
+# options(digits=5)
+# ip_r_ar_out
+vo <-  y_vo
+
+vo_ar_out_hat <- rep(0,n_out)
+for (i in 1:240){
+  va_m <- cbind(vo[i+491],1)
+  va_m <- as.matrix(va_m)
+  vo_ar_out_hat[i] <- va_m %*% vo_ar_coef
+  vo[i+492] <- vo_ar_out_hat[i]
+  
+}
+
+r <- y_vo_out-vo_ar_out_hat
+vo_r_ar_out <- sum(r^2)
+ 
+
+vo_r_ar_out
+
+```
+
+
+
+## vo_PCA_out
+```{r}
+
+vo <- y_vo
+
+S_vo_out <- (1/n_out)*t(Z_vo_out)%*%Z_vo_out
+de_vo_out <- eigen(S_vo_out)
+ve_vo_out <- de_vo_out$vectors[,1:15]
+
+
+f_vo_pca_out <- Z_vo_out %*% ve_vo_out
+f_vo_pca_out <- as.matrix(f_vo_pca_out)
+
+vo_pca_out_hat <- rep(0,n_out)
+
+
+for (i in 1:240){
+  va_m <- c(1,f_vo_pca_out[i,],vo[i+491])
+  va_m <- matrix(va_m,nrow=1)
+  vo_pca_out_hat[i] <- va_m %*% vo_pca_coef
+  vo[i+492] <- vo_pca_out_hat[i]
+  
+}
+
+r <- y_vo_out-vo_pca_out_hat
+vo_r_pca_out <- sum(r^2)
+ 
+#options(digits=4)
+vo_r_pca_out
+
+```
+
+
+
+## vo_ICA_out
+```{r}
+
+vo <- y_vo
+
+#set.seed(09)
+
+vo_r_ica_out <- list(rep(0,100)) #对100次结果取平均
+
+
+for (j in 1:100){
+  
+  f_vo_ica_out <- fastICA(X_vo_out,n.comp=15,alg.typ = "parallel",
+                    fun = "logcosh",method="R")$S
+  f_vo_ica_out <- data.frame(f_vo_ica_out)
+  vo_ica_out_hat <- rep(0,n_out)
+  for (i in 1:240){
+  va_m <- cbind(1,f_vo_ica_out[i,],vo[i+491])
+  va_m <- as.matrix(va_m)
+  vo_ica_out_hat[i] <- va_m %*% vo_ica_coef
+  vo[i+492] <- vo_ica_out_hat[i]
+  
+  }
+  r <- y_vo_out-vo_ica_out_hat
+  vo_r_ica_out[[1]][j] <- sum(r^2)
+}
+
+
+vo_r_ica_out <- mean(vo_r_ica_out[[1]])
+ 
+#options(digits=4)
+vo_r_ica_out
+
+```
+
+
+
+
+## vo_sPCA_out
+```{r}
+vo <- y_vo
+
+X_vo_spca_out <- Z_vo_out%*%GAM_vo_in
+Z_vo_spca_out <- apply(X_vo_spca_out,2,scale)
+
+#S_ip_spca_out <- (1/n_out)*t(Z_ip_spca_out)%*%Z_ip_spca_out
+S_vo_spca_out <- cov(X_vo_spca_out)
+de_vo_spca_out <- eigen(S_vo_spca_out)
+ve_vo_spca_out <- de_vo_spca_out$vectors[,1:15]
+f_vo_spca_out <- X_vo_spca_out %*% ve_vo_spca_out
+
+vo_spca_out_hat <- rep(0,n_out)
+
+for (i in 1:240){
+  va_m <- c(1,f_vo_spca_out[i,],vo[i+491])
+  va_m <- matrix(va_m,nrow=1)
+  vo_spca_out_hat[i] <- va_m %*% vo_spca_coef
+  vo[i+492] <- vo_spca_out_hat[i]
+  
+}
+
+r <- y_vo_out-vo_spca_out_hat
+vo_r_spca_out <- sum(r^2)
+ 
+#options(digits=5)
+vo_r_spca_out
+
+
+```
+
+
+
+
+## vo-sICA_out
+```{r}
+vo <- y_vo
+
+#set.seed(02)
+X_vo_sica_out <- Z_vo_out%*%GAM_vo_in
+Z_vo_sica_out <- apply(X_vo_sica_out,2,scale)
+
+vo_r_sica_out <- list(rep(0,100))
+
+for (j in 1:100){
+  
+  f_vo_sica_out <- fastICA(Z_vo_sica_out,n.comp=15,alg.typ = "parallel",
+                    fun = "logcosh",method="R")$S
+  f_vo_sica_out <- data.frame(f_vo_sica_out)
+  vo_sica_out_hat <- rep(0,n_out)
+  for (i in 1:240){
+  va_m <- cbind(1,f_vo_sica_out[i,],vo[i+491])
+  va_m <- as.matrix(va_m)
+  vo_sica_out_hat[i] <- va_m %*% vo_sica_coef
+  vo[i+492] <- vo_sica_out_hat[i]
+  
+  }
+  r <- y_vo_out-vo_sica_out_hat
+  vo_r_sica_out[[1]][j] <- sum(r^2)
+}
+
+
+vo_r_sica_out <- mean(vo_r_sica_out[[1]])
+ 
+#options(digits=5)
+vo_r_sica_out
+```
+
+
+
+
+

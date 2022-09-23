@@ -1,0 +1,547 @@
+---
+title: "Infla"
+author: "Feiyang PB18061344"
+date: "2022/5/11"
+output: pdf_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 加载相应的包
+
+```{r}
+library(fbi)
+library(forecast)
+library(fastICA)
+library(ggplot2)
+library(latex2exp)
+```
+
+# 读取数据
+```{r}
+file <- "./data/2021-12.csv"
+raw_data <- fredmd(file, date_start = NULL, date_end = NULL, transform = TRUE) ## fbi package "fredmd" 处理
+```
+
+
+
+# 处理数据
+```{r}
+#数据时间跨度1960-01-01~2020-12-01
+data <- raw_data[13:744,2:ncol(raw_data)]
+
+# NA数据化为0
+N <- ncol(data)
+for (i in 1:N){
+  data[which(is.na(data[,i])),i] <- 0
+}
+#rownames(data_new) <- data_bal[,1]                   
+```
+
+
+
+# 分离X和y
+```{r}
+y_name <- c("INDPRO","UNRATE","S&P 500","CPIAUCSL")
+y <- data[,colnames(data) %in% y_name]
+X <- data[,!colnames(data) %in% y_name] 
+```
+
+
+
+# 提取不同的y变量
+```{r}
+y_ia <- y[,"CPIAUCSL"]
+ia <- y_ia
+
+y_ip <- y[,"INDPRO"]
+y_unem <- y[,"UNRATE"]
+y_vola <- y[,"S&P 500"]
+```
+
+
+
+# 确定y数据的滞后阶数
+```{r}
+auto.arima(y_ia,max.p=20,max.q=0,ic="bic") #滞后11阶 (11,0,0)
+auto.arima(y_ip,max.p=20,max.q=0,ic="bic") #滞后6阶 (6,1,0)
+auto.arima(y_unem,max.p=20,max.q=0,ic="bic") #滞后0阶取1阶 (0,0,0)
+auto.arima(y_vola,max.p=20,max.q=0,ic="bic") #滞后1阶 (1,0,0)
+```
+
+
+# in-sample & out-of-sample 划分
+```{r}
+n_in <- 492 #1960-2000
+n_out <- 240 #2001-2020
+```
+
+
+
+
+# ia数据(in-sample)
+```{r}
+X_ia_in <- X[11:491,]
+C_ia_in <- scale(X_ia_in,center = TRUE,scale = FALSE)
+Z_ia_in <- apply(X_ia_in,2,scale)
+
+X_ia_in <- as.matrix(X_ia_in)
+C_ia_in <- as.matrix(C_ia_in)
+Z_ia_in <- as.matrix(Z_ia_in)
+
+y_ia_in <- y_ia[12:n_in]
+
+ia1 <- y_ia[11:491]
+ia2 <- y_ia[10:490]
+ia3 <- y_ia[9:489]
+ia4 <- y_ia[8:488]
+ia5 <- y_ia[7:487]
+ia6 <- y_ia[6:486]
+ia7 <- y_ia[5:485]
+ia8 <- y_ia[4:484]
+ia9 <- y_ia[3:483]
+ia10 <- y_ia[2:482]
+ia11 <- y_ia[1:481]
+```
+
+
+
+
+## ia in-sample ar
+```{r}
+ia_ar <- arima(y_ia[1:n_in],order=c(11,0,0))
+ia_ar_coef <- ia_ar$coef
+
+a <- matrix(rep(1,n_in-11),nrow=n_in-11,ncol=1)
+ia_ar_in <- cbind(ia1,ia2,ia3,ia4,ia5,ia6,ia7,ia8,
+                  ia9,ia10,ia11,a)
+ia_ar_in <- as.matrix(ia_ar_in)
+
+ia_ar_in_hat <- ia_ar_in %*% ia_ar_coef
+r <- y_ia_in-ia_ar_in_hat
+ia_r_ar_in <- sum(r^2)
+
+ia_r_ar_in
+```
+
+
+
+
+## ia_PCA_in
+```{r}
+S_ia_in <- (1/n_in-11)*t(Z_ia_in)%*%Z_ia_in
+#S_ip_in <- cov(Z_ip_in)
+de_ia_in <- eigen(S_ia_in)
+ve_ia_in <- de_ia_in$vectors[,1:10]
+
+f_ia_pca_in <- Z_ia_in %*% ve_ia_in
+f_ia_pca_in <- data.frame(f_ia_pca_in)
+data_ia_pca_in <- cbind (f_ia_pca_in,
+                         ia1,ia2,ia3,ia4,ia5,ia6,
+                         ia7,ia8,ia9,ia10,ia11,y_ia_in)
+lm_ia_pca_in <- lm(y_ia_in~.,data=data_ia_pca_in)
+
+ia_pca_coef <- lm_ia_pca_in$coefficients
+
+
+a <- matrix(rep(1,n_in-11),nrow=n_in-11,ncol=1)
+
+va_m <- cbind(a,f_ia_pca_in,ia1,ia2,ia3,ia4,ia5,ia6,
+              ia7,ia8,ia9,ia10,ia11)
+va_m <- as.matrix(va_m)
+
+
+ia_pca_in_hat <- va_m %*% ia_pca_coef
+r <- y_ia_in-ia_pca_in_hat
+ia_r_pca_in <- sum(r^2)
+
+options(digits=5)
+ia_r_pca_in
+```
+
+
+
+
+## ia_ica_in
+```{r}
+# S_ip_in <- (1/n_in-6)*t(C_ip_in)%*%C_ip_in
+# de_ip_in <- eigen(S_ip_in)
+# ve_ip_in <- de_ip_in$vectors
+# va_ip_in <- de_ip_in$values
+# f_ip_in <- C_ip_in %*% ve_ip_in
+# VA_ip_in<- diag(va_ip_in)
+
+f_ia_ica_in <- fastICA(X_ia_in,n.comp=1,alg.typ = "parallel",
+                    fun = "logcosh",method="R")$S
+f_ia_ica_in <- data.frame(f_ia_ica_in)
+
+data_ia_ica_in <- cbind (f_ia_ica_in,
+                         ia1,ia2,ia3,ia4,ia5,ia6,
+                         ia7,ia8,ia9,ia10,ia11,y_ia_in)
+lm_ia_ica_in <- lm(y_ia_in~.,data=data_ia_ica_in)
+ia_ica_coef <- lm_ia_ica_in$coefficients
+
+
+a <- matrix(rep(1,n_in-11),nrow=n_in-11,ncol=1)
+
+va_m <- cbind(a,f_ia_ica_in,ia1,ia2,ia3,ia4,ia5,ia6,
+              ia7,ia8,ia9,ia10,ia11)
+va_m <- as.matrix(va_m)
+
+
+
+ia_ica_in_hat <- va_m %*% ia_ica_coef
+r <- y_ia_in-ia_ica_in_hat
+ia_r_ica_in <- sum(r^2)
+
+
+ia_r_ica_in
+```
+
+
+
+## ia_sPCA_in
+```{r}
+# regress ia on the standardized indicator
+lm_ia_in <- lm(y_ia_in~Z_ia_in)
+gam_ia_in <- lm_ia_in$coefficients[2:124]
+GAM_ia_in<- diag(gam_ia_in)
+
+X_ia_spca_in <- Z_ia_in%*%GAM_ia_in
+Z_ia_spca_in <- apply(X_ia_spca_in,2,scale)
+
+
+
+S_ia_spca_in <- cov(X_ia_spca_in)
+de_ia_spca_in <- eigen(S_ia_spca_in)
+ve_ia_spca_in <- de_ia_spca_in$vectors[,1:10]
+f_ia_spca_in <- X_ia_spca_in %*% ve_ia_spca_in
+
+data_ia_spca_in <- cbind(f_ia_spca_in,ia1,ia2,ia3,ia4,ia5,ia6,
+                    ia7,ia8,ia9,ia10,ia11,y_ia_in)
+
+data_ia_spca_in <- data.frame(data_ia_spca_in)
+lm_ia_spca_in <- lm(y_ia_in~.,data=data_ia_spca_in)
+ia_spca_coef <- lm_ia_spca_in$coefficients
+
+a <- matrix(rep(1,n_in-11),nrow=n_in-11,ncol=1)
+
+va_m <- cbind(a,f_ia_spca_in,ia1,ia2,ia3,ia4,ia5,ia6,
+              ia7,ia8,ia9,ia10,ia11)
+va_m <- as.matrix(va_m)
+
+
+
+ia_spca_in_hat <- va_m %*% ia_spca_coef
+r <- y_ia_in-ia_spca_in_hat
+ia_r_spca_in <- sum(r^2)
+
+ia_r_spca_in
+```
+
+
+
+## ia_sICA_in
+```{r}
+lm_ia_in <- lm(y_ia_in~Z_ia_in)
+gam_ia_in <- lm_ia_in$coefficients[2:124]
+GAM_ia_in<- diag(gam_ia_in)
+
+X_ia_sica_in <- Z_ia_in%*%GAM_ia_in
+Z_ia_sica_in <- apply(X_ia_sica_in,2,scale)
+
+f_ia_sica_in <- fastICA(Z_ia_sica_in,n.comp=10,
+                        alg.typ = "parallel",
+                     fun = "logcosh",method="R")$S
+
+f_ia_sica_in <- data.frame(f_ia_sica_in)
+data_ia_sica_in <- cbind(f_ia_sica_in,ia1,ia2,ia3,ia4,ia5,ia6,
+                    ia7,ia8,ia9,ia10,ia11,y_ia_in)
+
+lm_ia_sica_in <- lm(y_ia_in~.,data=data_ia_sica_in)
+
+ia_sica_coef <- lm_ia_sica_in$coefficients
+
+
+a <- matrix(rep(1,n_in-11),nrow=n_in-11,ncol=1)
+
+va_m <- cbind(a,f_ia_sica_in,ia1,ia2,ia3,ia4,ia5,ia6,
+              ia7,ia8,ia9,ia10,ia11)
+va_m <- as.matrix(va_m)
+
+ia_sica_in_hat <- va_m %*% ia_sica_coef
+r <- y_ia_in-ia_sica_in_hat
+ia_r_sica_in <- sum(r^2)
+
+
+ia_r_sica_in
+```
+
+
+
+
+##################  out-of-sample  ################
+######################################################
+# ia数据(out-of-sample)
+```{r}
+X_ia_out <- X[492:731,]
+C_ia_out <- scale(X_ia_out,center = TRUE,scale = FALSE)
+Z_ia_out <- apply(X_ia_out,2,scale)
+
+X_ia_out <- as.matrix(X_ia_out)
+C_ia_out <- as.matrix(C_ia_out)
+Z_ia_out <- as.matrix(Z_ia_out)
+
+y_ia_out <- y_ip[493:732]
+```
+
+
+
+## ia out-of-sample ar
+```{r}
+ia_ar_out <- arima(y_ia[491:732],order=c(11,0,0))
+ia_ar_out_coef <- ia_ar_out$coef
+ 
+a <- matrix(rep(1,n_out),nrow=n_out,ncol=1)
+ia_ar_out <- cbind(y_ia[492:731],y_ia[491:730],y_ia[490:729],
+                   y_ia[489:728],y_ia[488:727],
+                   y_ia[487:726],y_ia[486:725],y_ia[485:724],
+                   y_ia[484:723],y_ia[483:722],y_ia[482:721],a)
+ia_ar_out <- as.matrix(ia_ar_out)
+
+
+ia_ar_out_hat <- ia_ar_out %*% ia_ar_out_coef
+r <- y_ia_out-ia_ar_out_hat
+ia_r_ar_out <- sum(r^2)
+
+ia_r_ar_out
+```
+
+
+
+## ia_PCA_out
+```{r}
+ia <- y_ia
+
+S_ia_out <- (1/n_out)*t(Z_ia_out)%*%Z_ia_out
+de_ia_out <- eigen(S_ia_out)
+
+ve_ia_out <- de_ia_out$vectors[,1:10]
+
+f_ia_pca_out <- Z_ia_out %*% ve_ia_out
+f_ia_pca_out <- as.matrix(f_ia_pca_out)
+
+ia_pca_out_hat <- rep(0,n_out)
+
+
+for (i in 1:240){
+  va_m <- c(1,f_ia_pca_out[i,],ia[i+491],ia[i+490],ia[i+489],
+            ia[i+488],ia[i+487],ia[i+486],ia[i+485],ia[i+484],
+            ia[i+483],ia[i+482],ia[i+481])
+  va_m <- matrix(va_m,nrow=1)
+  ia_pca_out_hat[i] <- va_m %*% ia_pca_coef
+  ia[i+492] <- ia_pca_out_hat[i]
+  
+}
+
+r <- y_ia_out - ia_pca_out_hat
+ia_r_pca_out <- sum(r^2)
+ 
+#options(digits=4)
+ia_r_pca_out
+
+```
+
+
+
+## ia_ICA_out
+```{r}
+ia <- y_ia
+ia_r_ica_out <- list(rep(0,10))
+
+for (j in 1:10){
+  
+  f_ia_ica_out <- fastICA(X_ia_out,n.comp=10,alg.typ = "parallel",
+                    fun = "logcosh",method="R")$S
+  f_ia_ica_out <- data.frame(f_ia_ica_out)
+  
+  ia_ica_out_hat <- rep(0,n_out)
+  for (i in 1:240){
+  va_m <- cbind(1,f_ia_ica_out[i,],ia[i+491],ia[i+490],ia[i+489],
+            ia[i+488],ia[i+487],ia[i+486],ia[i+485],ia[i+484],
+            ia[i+483],ia[i+482],ia[i+481])
+  va_m <- as.matrix(va_m)
+  ia_ica_out_hat[i] <- va_m %*% ia_ica_coef
+  ia[i+492] <- ia_ica_out_hat[i]
+  
+  }
+  r <- y_ia_out-ia_ica_out_hat
+  ia_r_ica_out[[1]][j] <- sum(r^2)
+}
+
+
+ia_r_ica_out <- mean(ia_r_ica_out[[1]])
+ 
+#options(digits=4)
+ia_r_ica_out
+
+```
+
+
+## ia_sPCA_out
+```{r}
+ia <- y_ia
+
+X_ia_spca_out <- Z_ia_out%*%GAM_ia_in
+Z_ia_spca_out <- apply(X_ia_spca_out,2,scale)
+
+
+S_ia_spca_out <- cov(X_ia_spca_out)
+de_ia_spca_out <- eigen(S_ia_spca_out)
+ve_ia_spca_out <- de_ia_spca_out$vectors[,1:10]
+f_ia_spca_out <- X_ia_spca_out %*% ve_ia_spca_out
+
+ia_spca_out_hat <- rep(0,n_out)
+
+for (i in 1:240){
+  va_m <- c(1,f_ia_spca_out[i,],ia[i+491],ia[i+490],ia[i+489],
+            ia[i+488],ia[i+487],ia[i+486],ia[i+485],ia[i+484],
+            ia[i+483],ia[i+482],ia[i+481])
+  va_m <- matrix(va_m,nrow=1)
+  ia_spca_out_hat[i] <- va_m %*% ia_spca_coef
+  ia[i+492] <- ia_spca_out_hat[i]
+  
+}
+
+r <- y_ia_out-ia_spca_out_hat
+ia_r_spca_out <- sum(r^2)
+ 
+#options(digits=4)
+ia_r_spca_out
+
+
+```
+
+
+```{r}
+ia_pca <- princomp(Z_ia_in,cor = T)
+screeplot(ia_pca,type="line",main="Screeplot",lwd=1.5,col="blue")
+```
+
+
+## ia-sICA_out
+```{r}
+ia <- y_ia
+
+#set.seed(1025)
+X_ia_sica_out <- Z_ia_out%*%GAM_ia_in
+Z_ia_sica_out <- apply(X_ia_sica_out,2,scale)
+
+ia_r_sica_out <- list(rep(0,100))
+
+for (j in 1:100){
+  
+  f_ia_sica_out <- fastICA(Z_ia_sica_out,n.comp=10,
+                           alg.typ = "parallel",
+                    fun = "logcosh",method="R")$S
+  f_ia_sica_out <- data.frame(f_ia_sica_out)
+  ia_sica_out_hat <- rep(0,n_out)
+  for (i in 1:240){
+
+  va_m <- cbind(1,f_ia_sica_out[i,],ia[i+491],ia[i+490],ia[i+489],
+            ia[i+488],ia[i+487],ia[i+486],ia[i+485],ia[i+484],
+            ia[i+483],ia[i+482],ia[i+481])
+  va_m <- as.matrix(va_m)
+  ia_sica_out_hat[i] <- va_m %*% ia_sica_coef
+  ia[i+492] <- ia_sica_out_hat[i]
+  
+  }
+  r <- y_ia_out-ia_sica_out_hat
+  ia_r_sica_out[[1]][j] <- sum(r^2)
+}
+
+ia_r_sica_out <- mean(ia_r_sica_out[[1]])
+ 
+#options(digits=5)
+ia_r_sica_out
+```
+
+
+
+##################### 因子载荷图  ######################
+########################################################
+# 因子载荷图比较ICA, scaled-ICA
+```{r}
+re <- fastICA(X_ia_in,n.comp=1,alg.typ = "parallel",
+              fun = "logcosh",method="R")
+lo <- re$K %*% re$W
+lo <- abs(lo*10^7)
+```
+
+
+
+```{r}
+se <- c(1:123)
+class <- c(rep("output",16),rep("labor",31),rep("housing",17),rep("money",14),rep("interest rates",21),rep("prices",24))
+
+loica1 <- data.frame(cbind(se,lo,class))
+loica1plot <-  ggplot(data=loica1,mapping=aes(x=se,y=lo[,1],fill=class))+
+  geom_bar(stat="identity",width=0.4)+
+  theme(axis.ticks = element_blank(), 
+        axis.text.y = element_blank(),axis.text.x = element_blank(),
+        axis.title.x=element_text(vjust=1,size=20), 
+        axis.title.y=element_text(vjust=1,size=20), 
+        plot.title = element_text(hjust = 0.5,vjust=0.5,size=32),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.background = element_blank(),
+        legend.title = element_text(size=30), 
+        legend.text = element_text(size=27))+
+  xlab("Variables")+ylab("Loadings")+
+labs(TeX("The $1_{st}$ ICA factor"))
+loica1plot
+```
+
+
+
+```{r}
+sre <- fastICA(Z_ia_sica_in,n.comp=2,alg.typ = "parallel",
+              fun = "logcosh",method="R")
+slo <- sre$K %*% sre$W
+slo <- abs(slo*10^7)
+```
+
+
+
+```{r}
+se <- c(1:123)
+class <- c(rep("output",16),rep("labor",31),rep("housing",17),rep("money",14),rep("interest rates",21),rep("prices",24))
+
+losica1 <- data.frame(cbind(se,slo,class))
+losica1plot <-  ggplot(data=losica1,mapping=aes(x=se,y=slo[,2],fill=class))+
+  geom_bar(stat="identity",width=0.4)+
+  theme(axis.ticks = element_blank(), 
+        axis.text.y = element_blank(),axis.text.x = element_blank(),
+        axis.title.x=element_text(vjust=1,size=20), 
+        axis.title.y=element_text(vjust=1,size=20), 
+        plot.title = element_text(hjust = 0.5,vjust=0.5,size=32),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.background = element_blank(),
+        legend.title = element_text(size=30), 
+        legend.text = element_text(size=27))+
+  xlab("Variables")+ylab(TeX("the $2_{nd}$ of 2 sICA factors"))
+losica1plot
+```
+
+
+
+
+
+
+
+
+
